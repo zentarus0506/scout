@@ -50,6 +50,15 @@ SCOUT_MODEL=deepseek-ai/DeepSeek-V3.2
 SCOUT_TRUST_ENV=0
 ```
 
+### 接入 Lens 追踪
+
+```bash
+pip install -e ../lens          # 可选依赖
+.venv/bin/python -m scout.cli ask "..." --trace
+```
+
+一次研究会记录成一条 run，三次模型调用各自成为一个 span，带 token 数和成本。Scout 不 import Lens 也能正常工作——`tracer` 只要求 `span()` 和 `record_llm()` 两个方法，任何兼容的对象都能接上。
+
 ## 架构
 
 ```

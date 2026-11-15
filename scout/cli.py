@@ -58,9 +58,28 @@ def _render(result, *, show_evidence: bool = True) -> str:
 def cmd_ask(args: argparse.Namespace) -> int:
     corpus = Corpus.load(args.corpus)
     llm = LLM() if args.offline else LLM.from_env(args.provider)
-    scout = Scout(corpus, llm)
 
-    result = scout.research(args.question, inject_errors=args.inject_errors)
+    if args.trace:
+        # Optional dependency, imported here so Scout keeps working without Lens.
+        try:
+            from lens import Lens
+        except ImportError:
+            print("需要先安装 lens：pip install -e ../lens", file=sys.stderr)
+            return 2
+        lens = Lens(project="scout", provider=args.provider)
+        llm.tracer = lens
+        with lens.trace("scout-research", input=args.question,
+                        metadata={"corpus": str(args.corpus)}) as run:
+            scout = Scout(corpus, llm)
+            result = scout.research(args.question, inject_errors=args.inject_errors)
+            run.output = result.report
+            run.tags = ["research"]
+        print(f"已记录到 Lens：{run.id} · {len(run.spans)} spans · "
+              f"${run.total_cost_usd:.6f} · {run.duration_ms:.0f}ms\n", file=sys.stderr)
+    else:
+        scout = Scout(corpus, llm)
+        result = scout.research(args.question, inject_errors=args.inject_errors)
+
     if args.json:
         print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
     else:
@@ -105,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     ask.add_argument("--offline", action="store_true", help="强制离线规则模式")
     ask.add_argument("--provider", default=None)
     ask.add_argument("--inject-errors", action="store_true", help="故意篡改结论以验证核查器")
+    ask.add_argument("--trace", action="store_true", help="把本次研究记录到 Lens（需已安装 lens）")
     ask.add_argument("--min-rate", type=float, default=0.0, help="核查通过率低于此值时返回非零")
     ask.set_defaults(func=cmd_ask)
 
